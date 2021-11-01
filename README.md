@@ -11,9 +11,9 @@ Lo que hace es primero calcular el NDWI (un indice que permite diferenciar super
 
 
 ```javascript
-////// Elegir Carpeta de Drive Nombre de Campo y Tolerancia del filtro de nubes
+////// Elegir Carpeta de Drive, Nombre del establecimiento y tolerancia del filtro de nubes
 
-var campo = 'La_Leonor' //sin espacios ni acentos
+var campo = 'Campo' //sin espacios ni acentos
 
 var carpeta = 'GEE' //sin espacios ni acentos, carpeta de Drive donde lo quiero guardar
 
