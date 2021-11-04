@@ -1,5 +1,4 @@
 ```javascript
-
 ////// Elegir Carpeta de Drive, Nombre del establecimiento y tolerancia del filtro de nubes
 
 var campo = 'Campo' //sin espacios ni acentos
