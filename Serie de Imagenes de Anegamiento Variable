@@ -6,14 +6,14 @@ var campo = 'Campo' //sin espacios ni acentos
 
 var carpeta = 'GEE' //sin espacios ni acentos, carpeta de Drive donde lo quiero guardar
 
-var tolerancia_filtro_nubes = 1 //filtra todas las imagenes que tengan por encima de este porcentaje de nubosidad
+var tolerancia_filtro_nubes = 1 //filtra todas las escenas que tengan por encima de este porcentaje de nubosidad
 
-var imagenes_promediadas = 3  // es la cantidad de imagenes que se promedian
+var imagenes_promediadas = 3  // es la cantidad de imagenes que se promedian, conviene valor 1, si se ven nubes lo subo hasta que se dejen de ver
 
 var buffer = 5000  // metros de buffer del lote a evaluar
 
 
-//EXTRAE UN DEGRADE DE 5 SITUACIONES DE ANEGAMIENTO: MIN, MAX, MEDIA Y DOS SITUACIONES INTERMEDIAS 
+//EXTRAE UN DEGRADE DE 5 SITUACIONES DE ANEGAMIENTO: MIN, MAX, MEDIA P25 y P75
 //EN BASE A TODA LA SERIE SENTINEL DISPONIBLE DEL ROI ELEGIDO////////
 
 //Filtro de nubes a nivel de pixel
@@ -37,13 +37,13 @@ var roi = table.map(function(feature) { return feature.buffer(buffer); })
 //   return image.addBands(ndvi);
 // }
 
-//Calculo de NDWI
+//Calcula NDWI y agrega la banda con los valores
 function addNDWI(image) {
   var ndwi = image.normalizedDifference(['B3', 'B8']).rename('ndwi');
   return image.addBands(ndwi);
 }
 
-//Coleccion de imagenes, filtro de nubes y calculo de NDVI y NDWI
+//Coleccion de imagenes, filtro de nubes y calculo de NDWI mediante las funciones creadas arriba
 var dataset = ee.ImageCollection('COPERNICUS/S2')
                   .filterBounds(roi)
                   //.filterDate('2015-05-01', ee.Date(Date.now()))
@@ -56,30 +56,30 @@ var dataset = ee.ImageCollection('COPERNICUS/S2')
 //print(dataset)
 
 
-
 function addSupAgua(image) {
   var agua = ee.Image(1).mask(image.select('ndwi')).gt(0).clip(roi)
   var areaAgua = agua.multiply(ee.Image.pixelArea())
                      .reduceRegion(ee.Reducer.sum(), table, 15, null, null, false, 1e13)
                      .get('constant','areaAgua')
   //var b_anega = ee.Image.constant(areaAgua) genera la banda constante con el area anegada
-  //return image.addBands(b_anega).set({Area_Anegada: areaAgua}) agregaba una banda con el valor de area anegada, no lo use
+  //return image.addBands(b_anega).set({Area_Anegada: areaAgua}) agregaba una banda constante con el valor de area anegada, no lo use
   return image.set({Area_Anegada: areaAgua})//.clip(table)
 }
 
-
-var datasetAgua = dataset.map(addSupAgua);
+var datasetAgua = dataset.map(addSupAgua); \\agrega a la metadata de cada imagen, el valor de area anegada
 
 //print('datasetAgua', datasetAgua)
 
 
-var aguaList0 = datasetAgua.aggregate_array('Area_Anegada');
+var aguaList0 = datasetAgua.aggregate_array('Area_Anegada'); \\genera una lista con todas las areas anegadas calculadas
 
-var aguaList = aguaList0.filter(ee.Filter.notEquals('item', 0));
+var aguaList = aguaList0.filter(ee.Filter.notEquals('item', 0)); \\quita todas las imagenes en las que no hay pixeles con agua
 
 //print('Lista de valores de area anegada con cero', aguaList0)
 //print('Lista de valores de area anegada sin cero', aguaList)
 
+
+\\calcula los percentiles de la lista
 var percentiles = aguaList.reduce(ee.Reducer.percentile([10, 25, 50, 75, 100],['IMG_P00','IMG_P25','IMG_P50','IMG_P75','IMG_P100']));
 
 //print('Percentiles', percentiles)
@@ -99,7 +99,8 @@ var areaP100 = ee.Dictionary(percentiles).get('IMG_P100');
 // print('Area P100', areaP100)
 
 
-//Hacer coleccion filtrada y ordenada y de esa elegir la primera
+//genera colecciones de imagenes, con la cantidad de imagenes que le indiquemos en la variable "imagenes_promediadas" de arriba
+//conviene valor 1, si se ven nubes lo subo hasta que se dejen de ver
 var colP00 = ee.ImageCollection(datasetAgua).filter(ee.Filter.lte('Area_Anegada', areaP00)).limit({max: imagenes_promediadas, property: 'Area_Anegada', ascending: false});
 var colP25 = ee.ImageCollection(datasetAgua).filter(ee.Filter.lte('Area_Anegada', areaP25)).limit({max: imagenes_promediadas, property: 'Area_Anegada', ascending: false});
 var colP50 = ee.ImageCollection(datasetAgua).filter(ee.Filter.lte('Area_Anegada', areaP50)).limit({max: imagenes_promediadas, property: 'Area_Anegada', ascending: false});
@@ -109,6 +110,7 @@ var colP100 = ee.ImageCollection(datasetAgua).filter(ee.Filter.lte('Area_Anegada
 //print('Coleccion P00', colP00)
 
 
+//calcula la mediana de cada coleccion creada anteriormente
 var P00 = colP00.median().clip(roi);
 var P25 = colP25.median().clip(roi);
 var P50 = colP50.median().clip(roi);
